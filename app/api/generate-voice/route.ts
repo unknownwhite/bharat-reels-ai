@@ -1,6 +1,15 @@
+export const runtime = "nodejs"
+
 import { NextResponse } from "next/server"
-import { exec } from "child_process"
-import path from "path"
+import { createClient } from "@supabase/supabase-js"
+import fs from "fs"
+
+const edgeTTS = require("edge-tts")
+
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(req: Request) {
 
@@ -9,33 +18,52 @@ export async function POST(req: Request) {
   const id = Date.now()
 
   const audioFile = `voice-${id}.mp3`
-  const subtitleFile = `voice-${id}.vtt`
+  const audioTmpPath = `/tmp/${audioFile}`
 
-  const audioPath = path.join(process.cwd(), "public", audioFile)
-  const subtitlePath = path.join(process.cwd(), "public", subtitleFile)
+  const cleanScript = script
+    .replace(/"/g, "")
+    .replace(/\n/g, " ")
+    .replace(/[<>]/g, "")
 
-  const cleanScript = script.replace(/"/g, "").replace(/\n/g, " ")
+  try {
 
-  const command = `python -m edge_tts --voice "en-IN-PrabhatNeural" --text "${cleanScript}" --write-media "${audioPath}" --write-subtitles "${subtitlePath}"`
+    const tts = new edgeTTS.Communicate(
+      cleanScript,
+      "en-IN-PrabhatNeural"
+    )
 
-  return new Promise((resolve, reject) => {
+    await tts.save(audioTmpPath)
 
-    exec(command, (error) => {
+    const fileBuffer = fs.readFileSync(audioTmpPath)
 
-      if (error) {
-        reject(error)
-        return
-      }
+    const { error } = await supabase.storage
+      .from("reels")
+      .upload(`voices/${audioFile}`, fileBuffer, {
+        contentType: "audio/mpeg"
+      })
 
-      resolve(
-        NextResponse.json({
-          audio: `/${audioFile}`,
-          subtitles: `/${subtitleFile}`
-        })
-      )
+    if (error) throw error
 
+    fs.unlinkSync(audioTmpPath)
+
+    const { data } = supabase
+      .storage
+      .from("reels")
+      .getPublicUrl(`voices/${audioFile}`)
+
+    return NextResponse.json({
+      audio: data.publicUrl
     })
 
-  })
+  } catch (err) {
+
+    console.error(err)
+
+    return NextResponse.json(
+      { error: "Voice generation failed" },
+      { status: 500 }
+    )
+
+  }
 
 }

@@ -8,10 +8,9 @@ import { supabase } from "@/lib/supabase"
 export async function POST(req: Request) {
   try {
 
-    const body = await req.json()
-    const { videoPath, title, description, user_id } = body
+    const { videoUrl, title, description, user_id } = await req.json()
 
-    if (!videoPath || !title || !user_id) {
+    if (!videoUrl || !title || !user_id) {
       return Response.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -56,22 +55,19 @@ export async function POST(req: Request) {
       auth: oauth2Client
     })
 
-    const safePath = videoPath.replace(/\.\./g, "")
-    const videoFile = path.join(process.cwd(), "public", safePath)
+    const tmpPath = `/tmp/video-${Date.now()}.mp4`
 
-    if (!fs.existsSync(videoFile)) {
-      return Response.json(
-        { error: "Video file not found", path: videoFile },
-        { status: 400 }
-      )
-    }
+    const videoResponse = await fetch(videoUrl)
+    const buffer = Buffer.from(await videoResponse.arrayBuffer())
+
+    fs.writeFileSync(tmpPath, buffer)
 
     const response = await youtube.videos.insert({
       part: ["snippet", "status"],
       requestBody: {
         snippet: {
           title,
-          description: description + "\n\n#shorts",
+          description: `${description}\n\n#shorts`,
           tags: ["ai", "shorts"],
           categoryId: "22"
         },
@@ -80,9 +76,11 @@ export async function POST(req: Request) {
         }
       },
       media: {
-        body: fs.createReadStream(videoFile)
+        body: fs.createReadStream(tmpPath)
       }
     })
+
+    fs.unlinkSync(tmpPath)
 
     return Response.json({
       success: true,

@@ -8,9 +8,9 @@ export async function GET(req: Request) {
 
   const supabase = await createSupabaseServer()
 
-  const { data: { user } } = await supabase.auth.getUser()
-
-  console.log("Server user:", user)
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return NextResponse.redirect(new URL("/login", req.url))
