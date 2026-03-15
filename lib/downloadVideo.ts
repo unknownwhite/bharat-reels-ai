@@ -1,21 +1,19 @@
-import fs from "fs";
-import path from "path";
+import fs from "fs"
 
 export async function downloadVideo(url: string) {
 
-  const res = await fetch(url);
-  const buffer = Buffer.from(await res.arrayBuffer());
+  const res = await fetch(url)
 
-  const fileName = `bg-${Date.now()}.mp4`;
+  if (!res.ok) {
+    throw new Error("Failed to download video")
+  }
 
-  const filePath = path.join(
-    process.cwd(),
-    "public",
-    "videos",
-    fileName
-  );
+  const buffer = Buffer.from(await res.arrayBuffer())
 
-  fs.writeFileSync(filePath, buffer);
+  const fileName = `bg-${Date.now()}.mp4`
+  const tmpPath = `/tmp/${fileName}`
 
-  return `/videos/${fileName}`;
+  fs.writeFileSync(tmpPath, buffer)
+
+  return tmpPath
 }

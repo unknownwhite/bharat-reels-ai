@@ -25,45 +25,28 @@ export async function POST(req: Request) {
     .replace(/\n/g, " ")
     .replace(/[<>]/g, "")
 
-  try {
+  const tts = new edgeTTS.Communicate(
+    cleanScript,
+    "en-IN-PrabhatNeural"
+  )
 
-    const tts = new edgeTTS.Communicate(
-      cleanScript,
-      "en-IN-PrabhatNeural"
-    )
+  await tts.save(audioTmpPath)
 
-    await tts.save(audioTmpPath)
+  const buffer = fs.readFileSync(audioTmpPath)
 
-    const fileBuffer = fs.readFileSync(audioTmpPath)
-
-    const { error } = await supabase.storage
-      .from("reels")
-      .upload(`voices/${audioFile}`, fileBuffer, {
-        contentType: "audio/mpeg"
-      })
-
-    if (error) throw error
-
-    fs.unlinkSync(audioTmpPath)
-
-    const { data } = supabase
-      .storage
-      .from("reels")
-      .getPublicUrl(`voices/${audioFile}`)
-
-    return NextResponse.json({
-      audio: data.publicUrl
+  await supabase.storage
+    .from("reels")
+    .upload(`voices/${audioFile}`, buffer, {
+      contentType: "audio/mpeg"
     })
 
-  } catch (err) {
+  fs.unlinkSync(audioTmpPath)
 
-    console.error(err)
+  const { data } = supabase
+    .storage
+    .from("reels")
+    .getPublicUrl(`voices/${audioFile}`)
 
-    return NextResponse.json(
-      { error: "Voice generation failed" },
-      { status: 500 }
-    )
-
-  }
+  return NextResponse.json({ audio: data.publicUrl })
 
 }
