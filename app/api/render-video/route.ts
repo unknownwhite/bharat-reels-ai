@@ -1,4 +1,5 @@
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 import { exec } from "child_process"
 import { promisify } from "util"
@@ -11,12 +12,12 @@ import { downloadVideo } from "@/lib/downloadVideo"
 
 const execAsync = promisify(exec)
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 export async function POST(req: Request) {
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 
   try {
 
@@ -27,26 +28,23 @@ export async function POST(req: Request) {
     // 1️⃣ get stock video
     const videoUrl = await getStockVideo(topic)
 
-    // 2️⃣ download to /tmp (serverless safe)
+    // 2️⃣ download to /tmp
     const localPath = await downloadVideo(videoUrl)
 
     const bg = localPath
-
     const voice = voiceUrl || ""
     const subtitles = subtitlesUrl || ""
 
-    // rendered output path
     const outputFile = `reel-${id}.mp4`
     const outputTmpPath = `/tmp/${outputFile}`
 
-    // run remotion renderer
-    const command = `node scripts/render-video.js "${hook}" "${script}" "${bg}" "${voice}" "${subtitles}" "${outputTmpPath}"`
+    const command =
+      `node scripts/render-video.js "${hook}" "${script}" "${bg}" "${voice}" "${subtitles}" "${outputTmpPath}"`
 
     await execAsync(command)
 
     const fileBuffer = fs.readFileSync(outputTmpPath)
 
-    // upload final video to supabase
     const { error } = await supabase.storage
       .from("reels")
       .upload(`renders/${outputFile}`, fileBuffer, {
@@ -76,5 +74,4 @@ export async function POST(req: Request) {
     )
 
   }
-
 }
