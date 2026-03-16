@@ -1,4 +1,5 @@
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
@@ -6,17 +7,16 @@ import fs from "fs"
 
 const edgeTTS = require("edge-tts")
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 export async function POST(req: Request) {
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 
   const { script } = await req.json()
 
   const id = Date.now()
-
   const audioFile = `voice-${id}.mp3`
   const audioTmpPath = `/tmp/${audioFile}`
 
@@ -48,5 +48,4 @@ export async function POST(req: Request) {
     .getPublicUrl(`voices/${audioFile}`)
 
   return NextResponse.json({ audio: data.publicUrl })
-
 }
