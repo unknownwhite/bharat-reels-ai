@@ -5,9 +5,15 @@ const nextConfig = {
     "@remotion/bundler",
     "remotion"
   ],
+
+  transpilePackages: [
+    "edge-tts"
+  ],
+
   typescript: {
     ignoreBuildErrors: true,
   },
+
   images: {
     unoptimized: true,
   },
