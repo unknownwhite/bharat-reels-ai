@@ -1,5 +1,6 @@
 {
   "name": "my-project",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -49,6 +50,7 @@
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
     "date-fns": "4.1.0",
+    "dotenv": "^17.3.1",
     "edge-tts": "^1.0.1",
     "embla-carousel-react": "8.6.0",
     "googleapis": "^168.0.0",

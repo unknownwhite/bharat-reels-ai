@@ -154,6 +154,6 @@ export async function getStockVideo(topic: string): Promise<string> {
   // final fallback
   console.warn("Using fallback video");
 
-  return "/videos/default.mp4";
+  return "https://xaiyexnmvkkmfkwdppxw.supabase.co/storage/v1/object/public/reels/bg/default.mp4";
 
 }

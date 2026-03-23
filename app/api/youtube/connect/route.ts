@@ -24,7 +24,10 @@ export async function GET(req: Request) {
 
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
-    scope: ["https://www.googleapis.com/auth/youtube.upload"],
+    scope: [
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/youtube.readonly"
+    ],
     prompt: "consent",
     state: user.id
   })

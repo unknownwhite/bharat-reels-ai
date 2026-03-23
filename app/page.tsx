@@ -12,7 +12,6 @@ import {
   Zap,
   Sparkles,
   TrendingUp,
-  Tv,
   Clock
 } from 'lucide-react'
 
@@ -68,10 +67,6 @@ export default function LandingPage() {
               Pricing
             </a>
 
-            <a href="#faq" className="text-sm text-muted-foreground hover:text-foreground transition">
-              FAQ
-            </a>
-
           </nav>
 
           <div className="flex items-center gap-3">
@@ -80,9 +75,7 @@ export default function LandingPage() {
 
               <>
                 <span className="text-sm text-muted-foreground">
-                  Welcome {user.user_metadata?.full_name
-  ? user.user_metadata.full_name.charAt(0).toUpperCase() + user.user_metadata.full_name.slice(1)
-  : user.email}
+                  Welcome {user.user_metadata?.full_name || user.email}
                 </span>
 
                 <Link href="/dashboard">
@@ -109,9 +102,9 @@ export default function LandingPage() {
                   </Button>
                 </Link>
 
-                <Link href="/signup">
+                <Link href="#pricing">
                   <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white">
-                    Get Started
+                    View Plans
                   </Button>
                 </Link>
               </>
@@ -138,33 +131,27 @@ export default function LandingPage() {
 
           <h1 className="text-5xl md:text-7xl font-bold text-foreground leading-tight">
 
-            Create YouTube Shorts in{' '}
+            Create Viral YouTube Shorts with{' '}
 
             <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              seconds
+              AI
             </span>
 
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
 
-            AI-powered content generation, smart scheduling, and analytics.
-            Turn your ideas into viral YouTube Shorts without the hassle.
+            Turn any idea into engaging YouTube Shorts automatically.
+            Script, voice, and video generated in seconds.
 
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
 
-            <Link href="/signup">
+            <Link href="#pricing">
               <Button size="lg" className="bg-purple-600 hover:bg-purple-700 text-white px-8 group">
-                Start Free Trial
+                View Pricing
                 <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition" />
-              </Button>
-            </Link>
-
-            <Link href="/login">
-              <Button size="lg" variant="outline">
-                Watch Demo
               </Button>
             </Link>
 
@@ -188,7 +175,7 @@ export default function LandingPage() {
             </h2>
 
             <p className="text-lg text-muted-foreground">
-              Three simple steps to grow your YouTube channel
+              Create shorts in three simple steps
             </p>
 
           </div>
@@ -198,18 +185,18 @@ export default function LandingPage() {
             {[
               {
                 icon: <Sparkles className="w-8 h-8" />,
-                title: 'Generate with AI',
-                description: 'Enter a topic and let AI create engaging hooks and scripts'
+                title: 'AI Script',
+                description: 'Enter a topic and AI generates viral hooks and scripts'
               },
               {
                 icon: <Clock className="w-8 h-8" />,
-                title: 'Smart Schedule',
-                description: 'Pick optimal posting times and let the system publish automatically'
+                title: 'AI Voice',
+                description: 'Natural voiceover generated automatically'
               },
               {
                 icon: <TrendingUp className="w-8 h-8" />,
-                title: 'Grow Faster',
-                description: 'Track performance and optimize your content strategy'
+                title: 'Auto Video',
+                description: 'Your short is rendered and ready to post'
               }
             ].map((feature, idx) => (
 
@@ -241,6 +228,54 @@ export default function LandingPage() {
 
       </section>
 
+
+     {/* Pricing */}
+
+<section id="pricing" className="py-20 px-4 md:px-6">
+
+  <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8">
+
+    {[
+      { name: 'Starter', price: '₹299', limit: '20 videos / month' },
+      { name: 'Creator', price: '₹799', limit: '80 videos / month' },
+      { name: 'Pro', price: '₹1999', limit: '250 videos / month' }
+    ].map((plan) => (
+
+      <Card key={plan.name}>
+
+        <CardContent className="p-8 text-center space-y-4">
+
+          <h3 className="text-xl font-bold">{plan.name}</h3>
+
+          <p className="text-4xl font-bold">{plan.price}</p>
+
+          <p className="text-muted-foreground">{plan.limit}</p>
+
+          <Button
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+            onClick={() => {
+
+              if (!user) {
+                window.location.href = "/signup"
+                return
+              }
+
+              window.location.href = `/checkout?plan=${plan.name}`
+
+            }}
+          >
+            Get Started
+          </Button>
+
+        </CardContent>
+
+      </Card>
+
+    ))}
+
+  </div>
+
+</section>
 
       {/* Footer */}
 

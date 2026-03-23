@@ -1,635 +1,209 @@
-  'use client'
-
-  import { supabase } from "@/lib/supabase-browser"
-  import { useState, useEffect } from 'react'
-  import { PageHeader } from '@/components/page-header'
-  import { Button } from '@/components/ui/button'
-  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-  import { Label } from '@/components/ui/label'
-  import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-  } from '@/components/ui/select'
-  import { Textarea } from '@/components/ui/textarea'
-  import { Badge } from '@/components/ui/badge'
-  import { Progress } from '@/components/ui/progress'
-  import { Sparkles, Zap } from 'lucide-react'
-
-
-  export default function CreatePage() {
-    const [topics, setTopics] = useState<string[]>([])
-const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
-useEffect(() => {
-
-  const suggestedTopics = [
-    "AI tools that save 10 hours of work",
-    "The business mindset of millionaires",
-    "Daily habits that make people successful",
-    "3 mistakes killing your productivity",
-    "How AI will change jobs in 5 years",
-    "The psychology behind viral content",
-    "Small business ideas with big profit",
-    "Why most people stay broke",
-    "One skill that will make you rich",
-    "Simple habits that build discipline"
-  ]
-
-  setTopics(suggestedTopics)
-
-}, [])
-  const [showUploadModal, setShowUploadModal] = useState(false)
-const [uploadMode, setUploadMode] = useState<"manual" | "auto" | null>(null)
-const [bestTime, setBestTime] = useState<string | null>(null)
-const getBestUploadTime = () => {
-
-  const slots = [12, 15, 18, 21] // 12pm, 3pm, 6pm, 9pm
-  const now = new Date().getHours()
-
-  const next = slots.find(s => s > now) ?? slots[0]
-
-  const label =
-    next === 12 ? "12:00 PM" :
-    next === 15 ? "3:00 PM" :
-    next === 18 ? "6:00 PM" :
-    "9:00 PM"
-
-  return label
-}
-    const [topic, setTopic] = useState('')
-    const [tone, setTone] = useState('engaging')
-    const [language, setLanguage] = useState('english')
-    const [length, setLength] = useState('60')
+'use client'
 
-    const [userId, setUserId] = useState<string | null>(null)
+import { supabase } from "@/lib/supabase-browser"
+import { useEffect, useState } from "react"
 
-useEffect(() => {
-  const getUser = async () => {
-    const { data } = await supabase.auth.getUser()
-    setUserId(data.user?.id ?? null)
-  }
+import { PageHeader } from "@/components/page-header"
+import { Button } from "@/components/ui/button"
+import {
+Card,
+CardHeader,
+CardTitle,
+CardContent,
+CardDescription
+} from "@/components/ui/card"
 
-  getUser()
-}, [])
+import { Badge } from "@/components/ui/badge"
 
-    const [preview, setPreview] = useState<{ hook: string; script: string } | null>(null)
-
-    const [isGenerating, setIsGenerating] = useState(false)
-    const [isRendering, setIsRendering] = useState(false)
-
-    const [performance, setPerformance] = useState(75)
-    const [videoUrl, setVideoUrl] = useState<string | null>(null)
-    const [voiceUrl, setVoiceUrl] = useState<string | null>(null)
-    const [subtitlesUrl, setSubtitlesUrl] = useState<string | null>(null)
-    useEffect(() => {
-
-    const saved = localStorage.getItem("generatedVideo")
-
-    if (saved) {
-
-      const data = JSON.parse(saved)
-
-      setVideoUrl(data.video)
-setShowUploadModal(true)
-
-      setPreview({
-        hook: data.hook,
-        script: data.script
-      })
-
-    }
+export default function CreatePage(){
 
-  }, [])
-    const [isUploading, setIsUploading] = useState(false)
-    
+const [userId,setUserId] = useState<string | null>(null)
+const [automationEnabled,setAutomationEnabled] = useState(false)
+const [youtubeConnected,setYoutubeConnected] = useState(false)
 
-    const handleGenerate = async () => {
+const [videos,setVideos] = useState<any[]>([])
+const [loading,setLoading] = useState(true)
 
-    if (!topic) return
+useEffect(()=>{
 
-    setIsGenerating(true)
+async function init(){
 
-    try {
+const {data} = await supabase.auth.getUser()
+if(!data.user) return
 
-      const res = await fetch('/api/generate-script', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          topic,
-          tone,
-          language,
-          length
-        })
-      })
+setUserId(data.user.id)
 
-      const data = await res.json()
+const {data:profile} = await supabase
+.from("users")
+.select("automation_enabled")
+.eq("id",data.user.id)
+.maybeSingle()
 
-      setPreview({
-    hook: data.hook,
-    script: data.script
-  })
+setAutomationEnabled(profile?.automation_enabled ?? false)
 
-  const voiceRes = await fetch('/api/generate-voice', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      script: data.script
-    })
-  })
+const {data:yt} = await supabase
+.from("youtube_accounts")
+.select("id")
+.eq("user_id",data.user.id)
+.maybeSingle()
 
-  const voiceData = await voiceRes.json()
+setYoutubeConnected(!!yt)
 
-  setVoiceUrl(voiceData.audio)
-  setSubtitlesUrl(voiceData.subtitles)
+await loadVideos(data.user.id)
 
-  setPerformance(85)
-
-    } catch (error) {
-
-      console.error(error)
-
-    }
-
-    setIsGenerating(false)
-
-  }
-
-    const handleRenderVideo = async () => {
-
-      if (!preview) return
-
-      setIsRendering(true)
-
-      try {
-
-        const res = await fetch('/api/render-video', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-    topic,
-    hook: preview.hook,
-    script: preview.script,
-    voiceUrl,
-    subtitlesUrl
-  })
-        })
-
-        const data = await res.json()
-
-setVideoUrl(data.video)
-setShowUploadModal(true)
-
-localStorage.setItem(
-  "generatedVideo",
-  JSON.stringify({
-    video: data.video,
-    hook: preview?.hook,
-    script: preview?.script
-  })
-
-  )
-
-      } catch (error) {
-
-        console.error(error)
-
-      }
-
-      setIsRendering(false)
-
-    }
-
-    const handleUploadYoutube = async () => {
-
-  if (!videoUrl || !preview) return
-
-  setIsUploading(true)
-
-  try {
-
-    const cleanPath = videoUrl.replace(/^.*\/videos\//, "videos/")
-
-    const res = await fetch('/api/youtube/upload', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        videoPath: cleanPath,
-        title: preview.hook,
-        description: preview.script + "\n\n#shorts",
-        user_id: userId
-      })
-    })
-
-    const data = await res.json()
-
-    if (data.success) {
-      alert("Video uploaded to YouTube 🎉")
-    } else {
-      alert(data.error)
-    }
-
-  } catch (error) {
-
-    console.error(error)
-
-  }
-
-  setIsUploading(false)
 }
 
-    const isFormValid = selectedTopic !== null
+init()
 
-    return (
+},[])
 
-      <div className="space-y-8">
+useEffect(()=>{
 
-        <PageHeader
-          title="Create Video"
-          description="Generate AI-powered YouTube Shorts in seconds"
-        />
+if(!userId) return
 
-        <div className="grid lg:grid-cols-2 gap-8">
+const interval = setInterval(()=>{
+loadVideos(userId)
+},5000)
 
-          {/* FORM SECTION */}
+return ()=>clearInterval(interval)
 
-          <Card className="border-border">
+},[userId])
 
-            <CardHeader>
-              <CardTitle>Video Details</CardTitle>
-              <CardDescription>
-                Tell us what your video should be about
-              </CardDescription>
-            </CardHeader>
+async function loadVideos(uid:string){
 
-            <CardContent className="space-y-6">
+const {data} = await supabase
+.from("generated_videos")
+.select("*")
+.eq("user_id",uid)
+.order("created_at",{ascending:false})
+.limit(20)
 
-              <div className="space-y-4">
+setVideos(data || [])
+setLoading(false)
 
-<Label className="text-foreground">
-Choose a Topic
-</Label>
+}
 
-<div className="grid gap-2">
+async function toggleAutomation(){
 
-{topics.map((t, index) => (
+if(!userId) return
 
-<button
-key={index}
-onClick={() => {
-  setSelectedTopic(t)
-  setTopic(t)
-}}
-className={`text-left p-3 rounded-lg border transition ${
-  selectedTopic === t
-    ? "border-purple-500 bg-purple-500/10"
-    : "border-border hover:bg-muted"
-}`}
->
+const newState = !automationEnabled
 
-{t}
+const {data,error} = await supabase
+.from("users")
+.update({
+automation_enabled:newState
+})
+.eq("id",userId)
+.select()
+.single()
 
-</button>
+if(!error && data){
+setAutomationEnabled(data.automation_enabled)
+}
 
-))}
+}
 
-</div>
+function getStatusColor(status:string){
 
-</div>
-              <div className="space-y-2">
+if(status==="queued") return "bg-gray-500 text-white"
 
-                <Label>Content Tone</Label>
+if(status==="rendering") return "bg-blue-600 text-white"
 
-                <Select value={tone} onValueChange={setTone}>
+if(status==="uploading") return "bg-yellow-600 text-white"
 
-                  <SelectTrigger className="bg-muted border-border">
-                    <SelectValue />
-                  </SelectTrigger>
+if(status==="published") return "bg-green-600 text-white"
 
-                  <SelectContent>
+if(status==="failed") return "bg-red-600 text-white"
 
-                    <SelectItem value="engaging">
-                      Engaging & Fun
-                    </SelectItem>
+return "bg-gray-400 text-white"
 
-                    <SelectItem value="informative">
-                      Informative
-                    </SelectItem>
+}
 
-                    <SelectItem value="educational">
-                      Educational
-                    </SelectItem>
+function getStatusMessage(status:string){
 
-                    <SelectItem value="motivational">
-                      Motivational
-                    </SelectItem>
+if(status==="queued") return "Waiting for worker"
 
-                    <SelectItem value="professional">
-                      Professional
-                    </SelectItem>
+if(status==="rendering") return "Rendering video..."
 
-                  </SelectContent>
+if(status==="uploading") return "Uploading to YouTube..."
 
-                </Select>
+if(status==="published") return "Video published successfully"
 
-              </div>
+if(status==="failed") return "Video generation failed"
 
+return ""
 
-                <div className="text-sm text-muted-foreground">
-  Video Length: 10 seconds
-  </div>
+}
 
+return(
 
-              <Button
-                onClick={handleGenerate}
-                disabled={!isFormValid || isGenerating}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white h-11"
-                size="lg"
-              >
+<div className="space-y-8">
 
-                {isGenerating ? (
-                  <>
-                    <Sparkles className="w-4 h-4 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4 mr-2" />
-                    Generate Preview
-                  </>
-                )}
+<PageHeader
+title="Automation Dashboard"
+description="Your AI video system"
+/>
 
-              </Button>
+<div className="grid lg:grid-cols-2 gap-8">
 
-            </CardContent>
-
-          </Card>
-
-          {/* PREVIEW SECTION */}
-
-          <div className="space-y-6">
-
-            {preview ? (
-
-              <>
-
-                <Card className="border-border">
-
-                  <CardHeader>
-                    <CardTitle className="text-lg">
-                      Performance Score
-                    </CardTitle>
-                  </CardHeader>
-
-                  <CardContent>
-
-                    <div className="space-y-2">
-
-                      <div className="flex items-center justify-between">
-
-                        <span className="text-sm font-medium">
-                          Content Quality
-                        </span>
-
-                        <Badge variant="secondary">
-                          {performance}%
-                        </Badge>
-
-                      </div>
-
-                      <Progress value={performance} className="h-2" />
-
-                    </div>
-
-                  </CardContent>
-
-                </Card>
-
-                <Card className="border-border">
-
-                  <CardHeader>
-                    <CardTitle>Hook</CardTitle>
-                  </CardHeader>
-
-                  <CardContent>
-
-                    <p className="bg-muted p-4 rounded-lg">
-                      {preview.hook}
-                    </p>
-
-                  </CardContent>
-
-                </Card>
-
-                <Card className="border-border">
-
-                  <CardHeader>
-                    <CardTitle>Script</CardTitle>
-                  </CardHeader>
-
-                  <CardContent>
-
-                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto">
-                      {preview.script}
-                    </pre>
-
-                  </CardContent>
-
-                </Card>
-
-                <div className="flex gap-3">
-
-                  <Button
-                    onClick={() => setPreview(null)}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Edit
-                  </Button>
-
-                  <Button
-                    onClick={handleRenderVideo}
-                    disabled={isRendering}
-                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
-                  >
-                    {isRendering ? 'Rendering Video...' : 'Generate Video'}
-                  </Button>
-
-                </div>
-
-              </>
-
-            ) : (
-
-              <Card className="border-dashed flex items-center justify-center min-h-96">
-
-                <CardContent className="text-center">
-
-                  <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-
-                  <p className="text-muted-foreground">
-                    Enter your topic and generate preview
-                  </p>
-
-                </CardContent>
-
-              </Card>
-
-            )}
-
-            {videoUrl && (
-
-              <Card>
-
-                <CardHeader>
-                  <CardTitle>Generated Video</CardTitle>
-                </CardHeader>
-
-
-
-                <CardContent>
-                  <div className="flex gap-3 mb-4">
-
-  <Button
-    onClick={() => window.location.href = "/api/youtube/connect"}
-    variant="outline"
-  >
-    Connect YouTube
-  </Button>
-
-  <Button
-    onClick={handleUploadYoutube}
-    disabled={isUploading}
-    className="bg-red-600 hover:bg-red-700 text-white"
-  >
-    {isUploading ? "Uploading..." : "Upload to YouTube"}
-  </Button>
-
-  </div>
-
-                <video
-    src={videoUrl}
-    controls
-    controlsList="nodownload noremoteplayback"
-    disablePictureInPicture
-    onContextMenu={(e) => e.preventDefault()}
-    className="w-full rounded-lg"
-  />
-
-                </CardContent>
-
-              </Card>
-
-            )}
-
-          </div>
-
-        </div>
-        {/* Upload Mode Modal */}
-
-{showUploadModal && (
-
-<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-
-<Card className="w-[420px]">
+<Card>
 
 <CardHeader>
-<CardTitle>Upload Mode</CardTitle>
+<CardTitle>Automation Control</CardTitle>
 <CardDescription>
-Choose how you want to upload your video
+Enable automatic video generation
 </CardDescription>
 </CardHeader>
 
 <CardContent className="space-y-4">
 
-<button
-onClick={() => setUploadMode("manual")}
-className={`w-full p-3 border rounded-lg text-left ${
-uploadMode === "manual"
-? "border-purple-500 bg-purple-500/10"
-: "border-border"
-}`}
+<Button
+onClick={toggleAutomation}
+className={
+automationEnabled
+? "bg-green-600 hover:bg-green-700 text-white"
+: "bg-gray-600 hover:bg-gray-700 text-white"
+}
 >
-Upload Now
-</button>
 
-<button
-onClick={() => {
-setUploadMode("auto")
-setBestTime(getBestUploadTime())
-}}
-className={`w-full p-3 border rounded-lg text-left ${
-uploadMode === "auto"
-? "border-purple-500 bg-purple-500/10"
-: "border-border"
-}`}
->
-Automatic Upload (Recommended)
-</button>
+{automationEnabled
+? "Automation Enabled"
+: "Enable Automation"}
 
-{uploadMode === "auto" && bestTime && (
+</Button>
 
-<p className="text-sm text-muted-foreground">
-Best upload time: <strong>{bestTime}</strong>
-</p>
+</CardContent>
 
-)}
+</Card>
+
+<Card>
+
+<CardHeader>
+<CardTitle>YouTube Connection</CardTitle>
+<CardDescription>
+Connect your channel once
+</CardDescription>
+</CardHeader>
+
+<CardContent>
+
+{youtubeConnected ? (
+
+<Badge className="bg-green-600 text-white">
+YouTube Connected
+</Badge>
+
+) : (
 
 <Button
-onClick={async () => {
-
-if (uploadMode === "manual") {
-await handleUploadYoutube()
-}
-
-if (uploadMode === "auto") {
-
-  if (!videoUrl || !preview || !userId) return
-
-  try {
-
-    const cleanPath = videoUrl.replace(/^.*\/videos\//, "videos/")
-
-    const { error } = await supabase
-      .from("generated_videos")
-      .insert({
-  user_id: userId,
-  topic: topic,
-  script: preview.script,
-  video_url: cleanPath,
-  scheduled_at: new Date(Date.now() + 60000).toISOString(),
-  status: "scheduled"
-})
-
-    if (error) throw error
-
-    alert(`Video scheduled for ${bestTime}`)
-
-  } catch (err) {
-
-    console.error(err)
-    alert("Scheduling failed")
-
-  }
-
-}
-
-setShowUploadModal(false)
-
-}}
-className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+onClick={()=>window.location.href="/api/youtube/connect"}
+variant="outline"
 >
-Continue
+Connect YouTube
 </Button>
+
+)}
 
 </CardContent>
 
@@ -637,10 +211,90 @@ Continue
 
 </div>
 
+<Card>
+
+<CardHeader>
+<CardTitle>Recent Videos</CardTitle>
+<CardDescription>
+Videos generated by the system
+</CardDescription>
+</CardHeader>
+
+<CardContent className="space-y-6">
+
+{loading && <p>Loading videos...</p>}
+
+{videos.map(video=>(
+
+<Card key={video.id}>
+
+<CardHeader className="flex flex-row items-center justify-between">
+
+<div>
+<CardTitle>{video.topic}</CardTitle>
+<p className="text-xs text-muted-foreground">
+{getStatusMessage(video.status)}
+</p>
+</div>
+
+<Badge className={getStatusColor(video.status)}>
+{video.status}
+</Badge>
+
+</CardHeader>
+
+<CardContent className="space-y-4">
+
+{video.video_url && (
+
+<video
+src={video.video_url}
+controls
+className="w-full rounded-lg"
+/>
+
 )}
 
-      </div>
+{video.script && (
 
-    )
+<div className="text-xs bg-muted p-4 rounded-lg">
+{video.script}
+</div>
 
-  }
+)}
+
+{video.youtube_url && (
+
+<a
+href={video.youtube_url}
+target="_blank"
+className="text-blue-600 underline text-sm"
+>
+View on YouTube
+</a>
+
+)}
+
+</CardContent>
+
+</Card>
+
+))}
+
+{videos.length===0 && !loading && (
+
+<p className="text-muted-foreground">
+No videos generated yet.
+</p>
+
+)}
+
+</CardContent>
+
+</Card>
+
+</div>
+
+)
+
+}
