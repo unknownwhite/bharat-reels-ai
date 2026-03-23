@@ -4,6 +4,9 @@ dotenv.config({ path: ".env.local" })
 import { createClient } from "@supabase/supabase-js"
 
 const BASE_URL = process.env.APP_URL || "http://localhost:3000"
+if (!process.env.APP_URL) {
+  throw new Error("APP_URL is missing in worker env")
+}
 
 console.log("APP_URL:", BASE_URL)
 
@@ -149,9 +152,16 @@ async function renderVideo(payload: any) {
 
 async function processJob(job: any) {
 
+  const startTime = Date.now()
+
   try {
 
-    console.log("Processing job:", job.id)
+    console.log(`[${new Date().toISOString()}] Processing job: ${job.id}`)
+
+    await supabase
+      .from("generated_videos")
+      .update({ status: "processing" })
+      .eq("id", job.id)
 
     if ((job.retry_count || 0) >= 3) {
 
@@ -171,6 +181,10 @@ async function processJob(job: any) {
     console.log("Generating script...")
 const scriptData = await generateScript(job.topic)
 
+    if (Date.now() - startTime > 300000) {
+  throw new Error("Job timeout exceeded")
+}
+
     if (!scriptData?.script) {
       throw new Error("Script generation failed")
     }
@@ -188,6 +202,10 @@ const scriptData = await generateScript(job.topic)
 
     console.log("Generating voice...")
 const voiceData = await generateVoice(scriptData.script)
+
+if (Date.now() - startTime > 300000) {
+  throw new Error("Job timeout exceeded")
+}
 
     if (!voiceData?.audio) {
       throw new Error("Voice generation failed")
@@ -210,6 +228,10 @@ const renderData = await renderVideo({
       script: scriptData.script,
       voiceUrl: voiceData.audio
     })
+
+    if (Date.now() - startTime > 300000) {
+  throw new Error("Job timeout exceeded")
+}
 
     if (!renderData?.video) {
       throw new Error("Render failed")
@@ -268,4 +290,11 @@ async function worker() {
 
 console.log("Video worker started")
 
-setInterval(worker, 2000)
+async function startWorker() {
+  while (true) {
+    await worker()
+    await sleep(1000)
+  }
+}
+
+startWorker()
