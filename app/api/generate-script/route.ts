@@ -4,13 +4,11 @@ import { NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createClient } from "@supabase/supabase-js"
 
-
-/* ---------- API ---------- */
-
 export async function POST(req: Request) {
   try {
-
     console.log("API HIT: generate-script")
+
+    /* ---------- ENV ---------- */
 
     const apiKey = process.env.GEMINI_API_KEY
 
@@ -27,7 +25,9 @@ export async function POST(req: Request) {
       process.env.SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
-    
+
+    /* ---------- INPUT ---------- */
+
     const { topic, tone = "engaging", language = "English" } = await req.json()
 
     if (!topic) {
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     /* ---------- MODEL ---------- */
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash"
+      model: "models/gemini-2.5-flash" // ✅ correct format
     })
 
     const prompt = `
@@ -84,15 +84,22 @@ Return ONLY valid JSON:
 }
 `
 
-    /* ---------- RETRY LOGIC ---------- */
+    /* ---------- RETRY ---------- */
 
-    async function generateWithRetry(prompt: string, retries = 3) {
+    async function generateWithRetry(retries = 3) {
       for (let i = 0; i < retries; i++) {
         try {
+          console.log("Calling Gemini... attempt:", i + 1)
+
           const result = await model.generateContent(prompt)
+
+          console.log("Gemini response received")
+
           return result
         } catch (err: any) {
-          if (err.status === 429) {
+          console.error("Gemini error:", err)
+
+          if (err?.status === 429) {
             console.log("Rate limited. Waiting 60s...")
             await new Promise(r => setTimeout(r, 60000))
           } else {
@@ -103,20 +110,20 @@ Return ONLY valid JSON:
       return null
     }
 
-    const result = await generateWithRetry(prompt)
+    /* ---------- TIMEOUT WRAPPER ---------- */
 
-    /* ---------- FALLBACK ---------- */
+    const result: any = await Promise.race([
+      generateWithRetry(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Gemini timeout")), 15000)
+      )
+    ])
 
-    if (!result) {
-      console.log("Using fallback script")
+    /* ---------- VALIDATION ---------- */
 
-      return NextResponse.json({
-        hook: "Discipline beats motivation.",
-        script: "Stay consistent. Stay focused. Success follows."
-      })
+    if (!result || !result.response) {
+      throw new Error("No response from Gemini")
     }
-
-    /* ---------- EXTRACT TEXT ---------- */
 
     const rawText = result.response.text()
 
@@ -124,14 +131,14 @@ Return ONLY valid JSON:
       throw new Error("Empty AI response")
     }
 
-    /* ---------- CLEAN RESPONSE ---------- */
+    /* ---------- CLEAN ---------- */
 
     let cleaned = rawText
       .replace(/```json/g, "")
       .replace(/```/g, "")
       .trim()
 
-    /* ---------- PARSE JSON ---------- */
+    /* ---------- PARSE ---------- */
 
     let parsed
 
@@ -147,7 +154,7 @@ Return ONLY valid JSON:
       parsed = JSON.parse(match[0])
     }
 
-    /* ---------- VALIDATION ---------- */
+    /* ---------- FINAL VALIDATION ---------- */
 
     if (!parsed?.hook || !parsed?.script) {
       throw new Error("Invalid AI structure")
@@ -156,12 +163,12 @@ Return ONLY valid JSON:
     return NextResponse.json(parsed)
 
   } catch (error: any) {
-    console.error("Gemini error:", error)
+    console.error("FINAL ERROR:", error)
 
     return NextResponse.json(
       {
         error: "AI generation failed",
-        details: error?.message || null
+        details: error?.message || "Unknown error"
       },
       { status: 500 }
     )
