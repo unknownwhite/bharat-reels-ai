@@ -4,25 +4,30 @@ import { NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createClient } from "@supabase/supabase-js"
 
-/* ---------- ENV ---------- */
-
-const apiKey = process.env.GEMINI_API_KEY
-
-if (!apiKey) {
-  throw new Error("GEMINI_API_KEY is missing")
-}
-
-const genAI = new GoogleGenerativeAI(apiKey)
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 /* ---------- API ---------- */
 
 export async function POST(req: Request) {
   try {
+
+    console.log("API HIT: generate-script")
+
+    const apiKey = process.env.GEMINI_API_KEY
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "GEMINI_API_KEY missing" },
+        { status: 500 }
+      )
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey)
+
+    const supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
     const { topic, tone = "engaging", language = "English" } = await req.json()
 
     if (!topic) {
