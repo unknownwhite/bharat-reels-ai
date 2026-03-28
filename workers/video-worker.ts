@@ -1,7 +1,10 @@
+//workers\video-worker.ts
+
 import dotenv from "dotenv"
 dotenv.config({ path: ".env.local" })
 
 import { createClient } from "@supabase/supabase-js"
+import { generateScriptAI } from "../lib/gemini"
 
 const BASE_URL = process.env.APP_URL || "http://localhost:3000"
 if (!process.env.APP_URL) {
@@ -100,20 +103,6 @@ return Array.isArray(data) ? data[0] : data
 /* GENERATION APIS */
 /* ------------------------------------------------ */
 
-async function generateScript(topic: string) {
-
-  return await fetchWithTimeout(
-    `${BASE_URL}/api/generate-script`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ topic })
-    }
-  )
-
-}
 
 async function generateVoice(script: string) {
 
@@ -179,7 +168,8 @@ async function processJob(job: any) {
     /* ---------- SCRIPT ---------- */
 
     console.log("Generating script...")
-const scriptData = await generateScript(job.topic)
+
+const scriptData = await generateScriptAI(job.topic)
 
     if (Date.now() - startTime > 300000) {
   throw new Error("Job timeout exceeded")
@@ -207,9 +197,13 @@ if (Date.now() - startTime > 300000) {
   throw new Error("Job timeout exceeded")
 }
 
+if (!voiceData) {
+  throw new Error("Voice API timeout")
+}
+
     if (!voiceData?.audio) {
-      throw new Error("Voice generation failed")
-    }
+  throw new Error("Voice generation failed")
+}
 
     await supabase
       .from("generated_videos")
@@ -233,9 +227,13 @@ const renderData = await renderVideo({
   throw new Error("Job timeout exceeded")
 }
 
+if (!renderData) {
+  throw new Error("Render API timeout")
+}
+
     if (!renderData?.video) {
-      throw new Error("Render failed")
-    }
+  throw new Error("Render failed")
+}
 
    await supabase
   .from("generated_videos")
@@ -269,31 +267,27 @@ console.log("Ready for upload:", job.id)
 /* ------------------------------------------------ */
 
 async function worker() {
-
   try {
-
     const job = await claimJob()
 
     if (!job) {
-      return
+      return false
     }
 
     await processJob(job)
+    return true
 
   } catch (err) {
-
     console.error("Worker error:", err)
-
+    return false
   }
-
 }
-
 console.log("Video worker started")
 
 async function startWorker() {
   while (true) {
-    await worker()
-    await sleep(1000)
+    const hasJob = await worker()
+    await sleep(hasJob ? 1000 : 5000)
   }
 }
 
