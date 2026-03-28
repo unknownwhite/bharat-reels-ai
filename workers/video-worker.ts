@@ -4,7 +4,7 @@ import dotenv from "dotenv"
 dotenv.config({ path: ".env.local" })
 
 import { createClient } from "@supabase/supabase-js"
-import { generateScriptAI } from "../lib/gemini"
+import { generateScriptAI } from "../lib/gemini.js"
 
 const BASE_URL = process.env.APP_URL || "http://localhost:3000"
 if (!process.env.APP_URL) {
