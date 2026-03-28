@@ -1,179 +1,113 @@
-//workers\video-worker.ts
-
 import dotenv from "dotenv"
-dotenv.config({ path: ".env.local" })
+dotenv.config()
 
 import { createClient } from "@supabase/supabase-js"
 import { generateScriptAI } from "../lib/gemini.js"
 
-const BASE_URL = process.env.APP_URL || "http://localhost:3000"
-if (!process.env.APP_URL) {
-  throw new Error("APP_URL is missing in worker env")
-}
+/* ---------------- ENV VALIDATION ---------------- */
 
-console.log("APP_URL:", BASE_URL)
+if (!process.env.APP_URL) throw new Error("APP_URL missing")
+if (!process.env.SUPABASE_URL) throw new Error("SUPABASE_URL missing")
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_KEY missing")
+
+const BASE_URL = process.env.APP_URL
+
+console.log("🚀 Worker started:", BASE_URL)
+
+/* ---------------- SUPABASE ---------------- */
 
 const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-async function safeRpc(name: string) {
-
-  for (let i = 0; i < 3; i++) {
-
-    try {
-
-      const { data, error } = await supabase.rpc(name)
-
-      if (!error) {
-        return data
-      }
-
-      console.error("RPC error:", error)
-
-    } catch (err) {
-
-      console.error("RPC retry:", err)
-
-    }
-
-    await sleep(2000)
-
-  }
-
-  return null
-}
-
-/* ------------------------------------------------ */
-/* UTILITIES */
-/* ------------------------------------------------ */
+/* ---------------- UTIL ---------------- */
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 async function fetchWithTimeout(url: string, options: any, timeout = 30000) {
-
   const controller = new AbortController()
   const id = setTimeout(() => controller.abort(), timeout)
 
   try {
-
     const res = await fetch(url, {
       ...options,
       signal: controller.signal
     })
 
     if (!res.ok) {
-      throw new Error(`API error: ${res.status}`)
+      throw new Error(`API error ${res.status}`)
     }
 
     return await res.json()
 
+  } catch (err) {
+    console.error("Fetch failed:", url, err)
+    return null
   } finally {
     clearTimeout(id)
   }
-
 }
 
-/* ------------------------------------------------ */
-/* CLAIM JOB */
-/* ------------------------------------------------ */
+/* ---------------- CLAIM JOB ---------------- */
 
 async function claimJob() {
-
   try {
+    const { data, error } = await supabase.rpc("claim_video_job")
 
-    const data = await safeRpc("claim_video_job")
+    if (error) {
+      console.error("RPC error:", error)
+      return null
+    }
 
-if (!data) return null
-return Array.isArray(data) ? data[0] : data
+    if (!data) return null
+    return Array.isArray(data) ? data[0] : data
 
   } catch (err) {
-
-    console.error("RPC connection error:", err)
+    console.error("Claim error:", err)
     return null
-
   }
-
 }
 
-/* ------------------------------------------------ */
-/* GENERATION APIS */
-/* ------------------------------------------------ */
-
+/* ---------------- EXTERNAL APIs ---------------- */
 
 async function generateVoice(script: string) {
-
-  return await fetchWithTimeout(
-    `${BASE_URL}/api/generate-voice`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ script })
-    }
-  )
-
+  return fetchWithTimeout(`${BASE_URL}/api/generate-voice`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ script })
+  })
 }
 
 async function renderVideo(payload: any) {
-
-  return await fetchWithTimeout(
+  return fetchWithTimeout(
     `${BASE_URL}/api/render-video`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     },
     120000
   )
-
 }
 
-/* ------------------------------------------------ */
-/* PROCESS JOB */
-/* ------------------------------------------------ */
+/* ---------------- PROCESS JOB ---------------- */
 
 async function processJob(job: any) {
-
   const startTime = Date.now()
 
   try {
-
-    console.log(`[${new Date().toISOString()}] Processing job: ${job.id}`)
+    console.log(`📦 Processing job: ${job.id}`)
 
     await supabase
       .from("generated_videos")
       .update({ status: "processing" })
       .eq("id", job.id)
 
-    if ((job.retry_count || 0) >= 3) {
-
-      console.log("Retry limit reached:", job.id)
-
-      await supabase
-        .from("generated_videos")
-        .update({ status: "permanently_failed" })
-        .eq("id", job.id)
-
-      return
-
-    }
-
     /* ---------- SCRIPT ---------- */
-
-    console.log("Generating script...")
-
-const scriptData = await generateScriptAI(job.topic)
-
-    if (Date.now() - startTime > 300000) {
-  throw new Error("Job timeout exceeded")
-}
+    const scriptData = await generateScriptAI(job.topic)
 
     if (!scriptData?.script) {
       throw new Error("Script generation failed")
@@ -188,22 +122,21 @@ const scriptData = await generateScriptAI(job.topic)
       })
       .eq("id", job.id)
 
+    /* ---------- TIMEOUT CHECK ---------- */
+    if (Date.now() - startTime > 300000) {
+      throw new Error("Job timeout")
+    }
+
     /* ---------- VOICE ---------- */
+    const voiceData = await generateVoice(scriptData.script)
 
-    console.log("Generating voice...")
-const voiceData = await generateVoice(scriptData.script)
+    if (!voiceData) {
+      throw new Error("Voice API timeout")
+    }
 
-if (Date.now() - startTime > 300000) {
-  throw new Error("Job timeout exceeded")
-}
-
-if (!voiceData) {
-  throw new Error("Voice API timeout")
-}
-
-    if (!voiceData?.audio) {
-  throw new Error("Voice generation failed")
-}
+    if (!voiceData.audio) {
+      throw new Error("Voice generation failed")
+    }
 
     await supabase
       .from("generated_videos")
@@ -213,76 +146,67 @@ if (!voiceData) {
       })
       .eq("id", job.id)
 
-    /* ---------- RENDER ---------- */
+    /* ---------- TIMEOUT CHECK ---------- */
+    if (Date.now() - startTime > 300000) {
+      throw new Error("Job timeout")
+    }
 
-    console.log("Rendering video...")
-const renderData = await renderVideo({
+    /* ---------- VIDEO ---------- */
+    const renderData = await renderVideo({
       topic: job.topic,
       hook: scriptData.hook,
       script: scriptData.script,
       voiceUrl: voiceData.audio
     })
 
-    if (Date.now() - startTime > 300000) {
-  throw new Error("Job timeout exceeded")
-}
+    if (!renderData) {
+      throw new Error("Render API timeout")
+    }
 
-if (!renderData) {
-  throw new Error("Render API timeout")
-}
+    if (!renderData.video) {
+      throw new Error("Render failed")
+    }
 
-    if (!renderData?.video) {
-  throw new Error("Render failed")
-}
+    await supabase
+      .from("generated_videos")
+      .update({
+        video_url: renderData.video,
+        status: "completed"
+      })
+      .eq("id", job.id)
 
-   await supabase
-  .from("generated_videos")
-  .update({
-    video_url: renderData.video,
-    status: "pending_upload"
-  })
-  .eq("id", job.id)
+    console.log(`✅ Job completed: ${job.id}`)
 
-console.log("Ready for upload:", job.id)
-
-  } catch (err) {
-
-    console.error("Job failed:", err)
+  } catch (err: any) {
+    console.error(`❌ Job failed: ${job.id}`, err.message)
 
     await supabase
       .from("generated_videos")
       .update({
         status: "failed",
-        error: String(err),
+        error: err.message,
         retry_count: (job.retry_count || 0) + 1
       })
       .eq("id", job.id)
-
   }
-
 }
 
-/* ------------------------------------------------ */
-/* WORKER LOOP */
-/* ------------------------------------------------ */
+/* ---------------- WORKER LOOP ---------------- */
 
 async function worker() {
   try {
     const job = await claimJob()
 
-    if (!job) {
-      return false
-    }
+    if (!job) return false
 
     await processJob(job)
     return true
 
   } catch (err) {
-    console.error("Worker error:", err)
+    console.error("Worker loop error:", err)
     return false
   }
 }
-console.log("Video worker started")
 
 async function startWorker() {
   while (true) {
